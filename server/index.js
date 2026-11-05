@@ -143,7 +143,7 @@ async function mergeRecords(list) {
         link=coalesce($11,title_records.link),image=coalesce($12,title_records.image),remarks=coalesce($13,title_records.remarks),updated_at=now()`,
         [p.id, nul(r.type), nul(r.no), nul(r.khata), nul(r.holders), nul(r.area), nul(r.unit), nul(r.asOf), nul(r.checked), nul(r.encumbrance), nul(r.link), nul(r.image), nul(r.remarks)]);
     }
-    await q("update parcels set state=coalesce($2,state),district=coalesce($3,district),taluka=coalesce($4,taluka),village_code=coalesce($5,village_code),geo=coalesce($6,geo) where id=$1",
+    await q("update parcels set state=coalesce($2,state),district=coalesce($3,district),taluka=coalesce($4,taluka),village_code=coalesce($5,village_code),geo=case when $6::jsonb is null then geo when geo->>'src'='govt' and $6::jsonb->>'src'<>'govt' then geo else $6::jsonb end where id=$1",
       [p.id, nul(x.state), nul(x.district), nul(x.taluka), nul(x.villageCode), x.geo ? JSON.stringify(x.geo) : null]);
     if (x.govtOwners) await q(`insert into title_records(parcel_id, govt_owners, govt_checked) values($1,$2,current_date)
       on conflict (parcel_id) do update set govt_owners=$2, govt_checked=current_date, updated_at=now()`, [p.id, JSON.stringify(x.govtOwners)]);
