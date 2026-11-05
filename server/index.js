@@ -129,8 +129,7 @@ app.put("/api/parcels/:id/record", need("editor"), async (req, res) => {
 });
 app.delete("/api/parcels/:id/record", need("editor"), async (req, res) => { await q("delete from title_records where parcel_id=$1", [req.params.id]); res.json({ ok: true }); });
 /* bulk merge from a records file (the 7/12 pull output) */
-app.post("/api/records/merge", need("editor"), async (req, res) => {
-  const list = (req.body && (req.body.records || req.body)) || [];
+async function mergeRecords(list) {
   let n = 0; const miss = [];
   for (const x of list) {
     const p = (await q("select id from parcels where sr=$1", [Number(x.sr)])).rows[0];
@@ -150,8 +149,29 @@ app.post("/api/records/merge", need("editor"), async (req, res) => {
       on conflict (parcel_id) do update set govt_owners=$2, govt_checked=current_date, updated_at=now()`, [p.id, JSON.stringify(x.govtOwners)]);
     n++;
   }
-  res.json({ merged: n, missing: miss });
+  return { merged: n, missing: miss };
+}
+app.post("/api/records/merge", need("editor"), async (req, res) => {
+  res.json(await mergeRecords((req.body && (req.body.records || req.body)) || []));
 });
+/* pull files shipped under public/pulls are applied once each, on boot */
+async function applyPulls() {
+  const dir = path.join(__dirname, "..", "public", "pulls");
+  let files = []; try { files = fs.readdirSync(dir).filter(f => f.endsWith(".json")).sort(); } catch (e) { return; }
+  const done = (await q("select value from settings where key='applied_pulls'")).rows[0];
+  const applied = new Set((done && done.value) || []);
+  for (const f of files) {
+    if (applied.has(f)) continue;
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+      const r = await mergeRecords(j.records || []);
+      applied.add(f);
+      await q("insert into settings(key,value) values('applied_pulls',$1) on conflict (key) do update set value=$1", [JSON.stringify([...applied])]);
+      await q("insert into audit(who,what,detail) values('system','pull.apply',$1)", [JSON.stringify({ file: f, merged: r.merged, missing: r.missing })]);
+      console.log("applied pull", f, r.merged, "parcels");
+    } catch (e) { console.error("pull", f, e.message); }
+  }
+}
 
 /* ─── government map: boundary + owners from Bhunaksha ─── */
 app.post("/api/parcels/:id/govt", need("editor"), async (req, res) => {
@@ -264,6 +284,7 @@ migrate().then(async () => {
     const n = (await q("select count(*)::int n from parcels")).rows[0].n;
     if (n === 0) { try { await require("./seed").seed(); } catch (e) { console.error("seed", e.message); } }
   }
+  await applyPulls();
   app.listen(PORT, () => console.log("Manjeet Land Register on :" + PORT));
   setTimeout(reader.processNext, 5000);
 }).catch(e => { console.error("db", e.message); setTimeout(() => process.exit(1), 5000); });
