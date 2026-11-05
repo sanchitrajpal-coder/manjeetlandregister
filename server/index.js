@@ -146,6 +146,8 @@ app.post("/api/records/merge", need("editor"), async (req, res) => {
     }
     await q("update parcels set state=coalesce($2,state),district=coalesce($3,district),taluka=coalesce($4,taluka),village_code=coalesce($5,village_code),geo=coalesce($6,geo) where id=$1",
       [p.id, nul(x.state), nul(x.district), nul(x.taluka), nul(x.villageCode), x.geo ? JSON.stringify(x.geo) : null]);
+    if (x.govtOwners) await q(`insert into title_records(parcel_id, govt_owners, govt_checked) values($1,$2,current_date)
+      on conflict (parcel_id) do update set govt_owners=$2, govt_checked=current_date, updated_at=now()`, [p.id, JSON.stringify(x.govtOwners)]);
     n++;
   }
   res.json({ merged: n, missing: miss });
