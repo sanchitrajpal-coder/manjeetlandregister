@@ -341,7 +341,7 @@ function mapSearch(){
 }
 function mapGo(id){
   var p = byId(id), lay = MAPLAYERS[id]; if (!p || !MAP) return;
-  var poly = polyOf(p); if (poly) MAP.fitBounds(poly, {padding:[40,40], maxZoom:17}); else { var g = geoOf(p); if (g) MAP.setView([g.lat, g.lng], 15); }
+  var poly = polyOf(p); if (poly) MAP.fitBounds((p.geo.polys && p.geo.polys.length) ? [].concat.apply([], p.geo.polys) : poly, {padding:[40,40], maxZoom:17}); else { var g = geoOf(p); if (g) MAP.setView([g.lat, g.lng], 15); }
   if (lay) lay.openPopup();
 }
 function paintMap(){
@@ -357,11 +357,12 @@ function paintMap(){
   mapList().forEach(function(p){
     var poly = polyOf(p);
     if (poly){
-      var a = polyArea(poly), m0 = sqm(p), isGovt = p.geo.src === "govt", col = isGovt ? "#2E8C3A" : "#2E8080";
-      var lay = L.polygon(poly, {color:col, weight:2, fillColor:col, fillOpacity:.25}).addTo(MAP);
+      var polys = (p.geo.polys && p.geo.polys.length) ? p.geo.polys : [poly];
+      var a = polys.reduce(function(s,q){ return s + polyArea(q); }, 0), m0 = sqm(p), isGovt = p.geo.src === "govt", col = isGovt ? "#2E8C3A" : "#2E8080";
+      var lay = L.polygon(polys.length > 1 ? polys : poly, {color:col, weight:2, fillColor:col, fillOpacity:.25}).addTo(MAP);
       lay.bindPopup('<b>SR '+esc(p.sr)+' · gat '+esc(p.survey||"")+'</b>'+esc(p.location)+' · '+esc(p.owner)+'<br>'+(isGovt?"Government boundary of the whole gat: ":"Drawn: ")+fmtArea(a/SQM.ACRE)+' acre'+(m0!==null?' · our parcel on sheet: '+fmtArea(m0/SQM.ACRE)+' acre':"")+'<br><a href="#" data-view="'+p.id+'">Open parcel</a>');
       MAPLAYERS[p.id] = lay;
-      poly.forEach(function(q){ pts.push(q); }); return;
+      polys.forEach(function(ring){ ring.forEach(function(q){ pts.push(q); }); }); return;
     }
     var g = geoOf(p); if (!g) return;
     var k = g.lat.toFixed(5)+","+g.lng.toFixed(5); groups[k] = groups[k] || {lat:g.lat, lng:g.lng, src:g.src, list:[]}; groups[k].list.push(p);
