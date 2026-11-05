@@ -1,6 +1,6 @@
 /* Manjeet Land Register — events and boot */
 document.addEventListener("click", function(ev){
-  var t = ev.target.closest ? ev.target.closest("[data-tab],[data-act],[data-view],[data-edit],[data-sell],[data-del],[data-undo],[data-page],[data-vpage],[data-rpage],[data-xpage],[data-close],[data-save],[data-dosell],[data-confirm],[data-drill],[data-sub],[data-group],[data-back],[data-dpage],[data-dcsv],[data-rec],[data-saverec],[data-recdel],[data-locate],[data-govt],[data-draw],[data-upload],[data-dropzone],[data-deldoc],[data-reread],[data-deluser],[data-recimg]") : null;
+  var t = ev.target.closest ? ev.target.closest("[data-tab],[data-act],[data-view],[data-edit],[data-sell],[data-del],[data-undo],[data-page],[data-vpage],[data-rpage],[data-xpage],[data-close],[data-save],[data-dosell],[data-confirm],[data-drill],[data-sub],[data-group],[data-back],[data-dpage],[data-dcsv],[data-rec],[data-saverec],[data-recdel],[data-locate],[data-govt],[data-draw],[data-upload],[data-dropzone],[data-deldoc],[data-reread],[data-deluser],[data-recimg],[data-mapgo]") : null;
   if (!t) return;
   var d = t.dataset;
   if (t.tagName === "A" && t.getAttribute("href") === "#") ev.preventDefault();
@@ -11,6 +11,7 @@ document.addEventListener("click", function(ev){
   if (d.group) { var fr = MSTACK[MSTACK.length-1]; if (fr){ fr.group = d.group; fr.page = 1; paintFrame(); } return; }
   if (d.dpage) { var fp = MSTACK[MSTACK.length-1]; if (fp){ fp.page = (fp.page||1) + Number(d.dpage); paintFrame(); } return; }
   if (d.dcsv !== undefined) { var fc = MSTACK[MSTACK.length-1]; if (fc) exportCSV(fc.ids.map(byId).filter(Boolean), fc.title); return; }
+  if (d.mapgo) { mapGo(d.mapgo); return; }
   if (d.tab) { S.tab = d.tab; render(); return; }
   if (d.view) { openDetail(d.view); return; }
   if (d.edit) { if (!canEdit()) return; closeModal(); openForm(d.edit); return; }
@@ -59,6 +60,7 @@ document.addEventListener("input", function(ev){
   else if (id === "recQ") { S.recs.q = el.value; S.recs.page = 1; paintRecords(); }
   else if (id === "docQ") { S.dox.q = el.value; S.dox.page = 1; paintDocuments(); }
   else if (id === "valQ") { S.val.q = el.value; S.val.page = 1; paintValuation(); }
+  else if (id === "mapQ") { S.map.q = el.value; clearTimeout(window._mq); window._mq = setTimeout(mapSearch, 250); }
 });
 var SETTLE = null;
 document.addEventListener("change", function(ev){

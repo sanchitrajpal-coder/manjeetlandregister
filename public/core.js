@@ -24,7 +24,7 @@ var S = {
   val:{q:"", only:"pending", owner:"all", page:1},
   recs:{q:"", state:"all", only:"all", page:1},
   dox:{q:"", only:"all", state:"all", page:1},
-  map:{state:"all", only:"held", base:"sat"}
+  map:{state:"all", only:"held", base:"sat", q:""}
 };
 
 /* ─── API ─── */

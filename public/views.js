@@ -313,17 +313,40 @@ function viewMap(){
       + '<button class="btn ghost tiny" data-draw="undo">Undo</button><button class="btn danger ghostd tiny" data-draw="clear">Clear</button><button class="btn solid tiny" data-draw="finish">Save boundary</button></div>';
   }
   return '<div class="stack"><div class="filters">'
+    + '<input class="search" id="mapQ" placeholder="Find on map: SR, village, gut/khasra, owner…" value="'+esc(S.map.q||"")+'" autocomplete="off">'
     + '<select id="mapState"><option value="all">All states</option>'+S.stateOrder.filter(function(k){return byState[k];}).map(function(k){ return '<option value="'+k+'"'+(S.map.state===k?" selected":"")+'>'+esc(S.states[k].name)+'</option>'; }).join("")+'</select>'
     + '<select id="mapOnly"><option value="held"'+(S.map.only==="held"?" selected":"")+'>In hand</option><option value="all"'+(S.map.only==="all"?" selected":"")+'>Everything</option></select>'
     + '<select id="mapBase"><option value="sat"'+(S.map.base!=="street"?" selected":"")+'>Satellite</option><option value="street"'+(S.map.base==="street"?" selected":"")+'>Streets</option></select>'
     + '<span class="spacer"></span>'
     + (canEdit() ? '<button class="btn ghost" data-act="govtall"'+(GOVT_RUN?" disabled":"")+'>'+(GOVT_RUN?"Fetching govt boundaries…":"Fetch govt boundaries")+'</button><button class="btn ghost" data-act="geoall"'+(GEO_RUN?" disabled":"")+'>'+(GEO_RUN?"Locating…":"Locate villages")+'</button>' : "")
-    + '</div>' + drawTools + '<div id="mapbox"></div>'
+    + '</div><div id="mapHits"></div>' + drawTools + '<div id="mapbox"></div>'
     + '<p class="mapfoot" id="geoProg">'+located.length+' of '+list.length+' parcels on the map · '+govt+' with the government boundary (green) · '+drawn+' drawn by hand (teal) · '+(list.length-located.length)+' not located yet</p>'
     + '<p class="mapfoot">Government boundaries come from the state Bhunaksha portal by village and gat number and outline the whole gat, which may hold several khatas. Village pins (amber) come from OpenStreetMap. To mark a plot exactly, choose it above and tap its corners on the satellite view, walk it with GPS, or import a KML from Google Earth.</p></div>';
 }
+var MAPLAYERS = {};   // parcel id → leaflet layer, for the search
+function mapSearch(){
+  var q = (S.map.q||"").trim().toLowerCase(), box = $("mapHits"); if (!box) return;
+  if (!q){ box.innerHTML = ""; return; }
+  var hits = mapList().filter(function(p){ return [p.sr, p.location, p.survey, p.owner, p.district, p.taluka].some(function(v){ return String(v||"").toLowerCase().indexOf(q) > -1; }); });
+  var located = hits.filter(function(p){ return geoOf(p); });
+  if (!hits.length){ box.innerHTML = '<p class="prose small dim" style="margin:0">Nothing matches.</p>'; return; }
+  box.innerHTML = '<div class="chips">' + located.slice(0,30).map(function(p){ return '<button class="chip" data-mapgo="'+p.id+'">SR '+esc(p.sr)+' · '+esc(p.survey||"")+' · '+esc(p.location)+(p.geo&&p.geo.src==="govt"?" ■":"")+'</button>'; }).join("")
+    + (hits.length - located.length ? '<span class="prose small dim" style="align-self:center">'+(hits.length-located.length)+' match'+(hits.length-located.length===1?"":"es")+' not on the map</span>' : "")
+    + (located.length > 30 ? '<span class="prose small dim" style="align-self:center">+'+(located.length-30)+' more</span>' : "") + '</div>';
+  if (MAP && located.length){
+    var pts = []; located.forEach(function(p){ var poly = polyOf(p); if (poly) poly.forEach(function(x){ pts.push(x); }); else { var g = geoOf(p); pts.push([g.lat, g.lng]); } });
+    MAP.fitBounds(pts, {padding:[40,40], maxZoom:16});
+    if (located.length === 1 && MAPLAYERS[located[0].id]) MAPLAYERS[located[0].id].openPopup();
+  }
+}
+function mapGo(id){
+  var p = byId(id), lay = MAPLAYERS[id]; if (!p || !MAP) return;
+  var poly = polyOf(p); if (poly) MAP.fitBounds(poly, {padding:[40,40], maxZoom:17}); else { var g = geoOf(p); if (g) MAP.setView([g.lat, g.lng], 15); }
+  if (lay) lay.openPopup();
+}
 function paintMap(){
   var box = $("mapbox"); if (!box || !window.L) return;
+  MAPLAYERS = {};
   MAP = L.map("mapbox", {scrollWheelZoom:false});
   var street = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:"&copy; OpenStreetMap contributors"});
   var sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {maxZoom:19, attribution:"Imagery &copy; Esri, Maxar, Earthstar Geographics"});
@@ -337,6 +360,7 @@ function paintMap(){
       var a = polyArea(poly), m0 = sqm(p), isGovt = p.geo.src === "govt", col = isGovt ? "#2E8C3A" : "#2E8080";
       var lay = L.polygon(poly, {color:col, weight:2, fillColor:col, fillOpacity:.25}).addTo(MAP);
       lay.bindPopup('<b>SR '+esc(p.sr)+' · gat '+esc(p.survey||"")+'</b>'+esc(p.location)+' · '+esc(p.owner)+'<br>'+(isGovt?"Government boundary of the whole gat: ":"Drawn: ")+fmtArea(a/SQM.ACRE)+' acre'+(m0!==null?' · our parcel on sheet: '+fmtArea(m0/SQM.ACRE)+' acre':"")+'<br><a href="#" data-view="'+p.id+'">Open parcel</a>');
+      MAPLAYERS[p.id] = lay;
       poly.forEach(function(q){ pts.push(q); }); return;
     }
     var g = geoOf(p); if (!g) return;
@@ -346,11 +370,13 @@ function paintMap(){
     var grp = groups[k], area = sumSqm(grp.list), col = grp.src === "pin" ? "#2E8080" : "#E0A44A";
     var m = L.circleMarker([grp.lat, grp.lng], {radius:Math.min(22, 6 + Math.sqrt(area/4046.86)*1.6), color:col, weight:2, fillColor:col, fillOpacity:.35}).addTo(MAP);
     m.bindPopup('<b>'+esc(grp.list[0].location)+'</b>'+grp.list.length+' parcel'+(grp.list.length===1?"":"s")+' · '+fmtArea(area/SQM.ACRE)+' acre'+(grp.src==="pin"?' · plot pin':' · village')+'<br>'+grp.list.slice(0,6).map(function(p){ return '<a href="#" data-view="'+p.id+'">SR '+esc(p.sr)+' '+esc(p.survey||"")+'</a>'; }).join(" · ")+(grp.list.length>6?' …':""));
+    grp.list.forEach(function(p){ MAPLAYERS[p.id] = m; });
     pts.push([grp.lat, grp.lng]);
   });
   if (pts.length) MAP.fitBounds(pts, {padding:[30,30], maxZoom:12}); else MAP.setView([19.5, 76.0], 6);
   MAP.on("click", function(ev){ if (DRAW && DRAW.active) drawAdd([ev.latlng.lat, ev.latlng.lng]); });
   if (DRAW) drawPaint();
+  if (S.map.q) mapSearch();
 }
 function drawTarget(){
   var sel = $("drawSel"), id = sel ? sel.value : "";
