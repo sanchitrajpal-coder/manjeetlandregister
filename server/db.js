@@ -5,7 +5,7 @@ types.setTypeParser(1082, v => v); // DATE as plain "YYYY-MM-DD", no timezone sh
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL && /railway|render|neon|supabase/.test(process.env.DATABASE_URL) ? { rejectUnauthorized: false } : false,
+  ssl: process.env.PGSSL === "1" || /sslmode=require/.test(process.env.DATABASE_URL || "") ? { rejectUnauthorized: false } : false,
   max: 8
 });
 

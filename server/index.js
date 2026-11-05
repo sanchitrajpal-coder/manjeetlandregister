@@ -264,4 +264,4 @@ migrate().then(async () => {
   }
   app.listen(PORT, () => console.log("Manjeet Land Register on :" + PORT));
   setTimeout(reader.processNext, 5000);
-}).catch(e => { console.error("db", e); process.exit(1); });
+}).catch(e => { console.error("db", e.message); setTimeout(() => process.exit(1), 5000); });
